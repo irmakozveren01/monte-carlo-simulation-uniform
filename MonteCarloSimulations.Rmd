@@ -1,0 +1,358 @@
+---
+title: "Monte Carlo Simulation for the Maximum Estimator of a Uniform Distribution"
+author: "Irmak Özveren / Halit Kaan Kesgin"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: false
+    number_sections: true
+  html_document: default
+---
+
+# Exact Theoretical Expressions
+```{r}
+# Theoretical formulas
+# bias function of the max estimator
+bias_exact <- function(theta, n) { 
+  -theta / (n + 1)
+}
+
+# variance function of the max estimator
+var_exact <- function(theta, n) {
+  n * theta^2 / ((n + 1)^2 * (n + 2))
+}
+
+# MSE function of the max estimator
+mse_exact <- function(theta, n) {
+  2 * theta^2 / ((n + 1) * (n + 2))
+}
+```
+
+# Monte Carlo Simulation
+```{r}
+# Set random seed for reproducibility
+set.seed(123)     
+
+# for example set theta as 1 and sample size n as 10, 
+# we will repeat the process B (10000) many times.
+theta <- 1
+n <- 10
+B <- 10000
+
+
+# take n observations from U(0, theta) after that add the maximum of them to the list t_hat.
+# repeat the process B many times then t_hat is our estimator.
+t_hat <- replicate(B, {
+  y <- runif(n, min = 0, max = theta)
+  max(y)                       
+})
+
+# Monte Carlo with bias, var, MSE
+mc_bias <- mean(t_hat - theta)
+mc_var  <- var(t_hat)
+mc_mse  <- mean( (t_hat - theta)^2 )
+
+mc_bias
+mc_var
+mc_mse
+
+bias_exact(theta,n)
+var_exact(theta,n)
+mse_exact(theta,n)
+```
+
+The Monte Carlo estimates closely match the corresponding theoretical values. This agreement indicates that the simulation procedure accurately reproduces the analytical properties of the maximum estimator under the $U(0,\theta)$ model.
+
+# Effect of Sample Size on Bias
+```{r}
+# theta <- 1 and B <- 10000 was defined above
+# Apply the monte carlo simulations for different n values
+n_values <- c(5, 10, 20, 50, 100, 250)
+
+bias_data <- data.frame()
+
+for (n in n_values) 
+{
+  
+  t_hat <- replicate(B, {
+    y <- runif(n, min = 0, max = theta)
+    max(y)
+  })
+
+  #	t_hat = (max(Y_1), max(Y_2), …, max(Y_B))
+	#	bias_values = (max(Y_1)-theta, max(Y_2)-theta, …, max(Y_B)-theta)
+
+  bias_values <- t_hat - theta 
+
+  bias_data <- rbind(bias_data, data.frame( n = factor(n), bias = bias_values))
+}
+# Exact bias values
+exact_bias_df <- data.frame(
+  n = factor(n_values),
+  exact_bias = bias_exact(theta, n_values)
+)
+```
+```{r}
+# Boxplot
+boxplot(bias ~ as.factor(n),
+        data = bias_data,
+        xlab = "Sample size n",
+        ylab = "Bias = max(Y) - theta",
+        main = "Bias distribution for different n",
+        names = n_values)
+# Exact Bias
+exact_bias_vals <- bias_exact(theta, n_values)
+
+points(x = 1:length(n_values),
+       y = exact_bias_vals,
+       col = "red",
+       pch = 19,
+       cex = 1.5)
+
+```
+
+The distribution of the bias becomes increasingly concentrated around zero as the sample size increases. The simulated bias closely follows the theoretical expectation, demonstrating that the estimator becomes less biased for larger samples. The boxplots also illustrate the convergence of the Monte Carlo estimates toward the theoretical bias.
+
+# Bias Approximation Error
+
+To assess the accuracy of the Monte Carlo estimates, we compare the simulated bias with its theoretical counterpart by constructing 95% confidence intervals based on the Monte Carlo standard errors. We therefore set $\alpha = 0.05$, yielding the critical value $z_{1-\alpha/2}\approx1.96$. These confidence intervals allow us to evaluate whether the observed discrepancies can be explained by simulation variability.
+
+```{r}
+alpha    <- 0.05
+z_alpha  <- qnorm(1 - alpha/2)
+z_alpha
+```
+```{r}
+bias_results <- data.frame()
+
+for (n in n_values) {
+
+  t_hat <- replicate(B, {
+    y <- runif(n, 0, theta)
+    max(y)
+  })
+  
+  # MC Bias
+  mc_bias <- mean(t_hat) - theta
+  # Exact Bias
+  ex_bias <- bias_exact(theta, n)
+
+  
+  # Difference
+  diff_bias <- mc_bias - ex_bias
+  
+  # Monte Carlo standard error
+  # The standard error helps us understand how reliable the Monte Carlo simulation results are.
+  se_bias <- sd(t_hat - theta) / sqrt(B)
+  
+  bias_results <- rbind(bias_results,
+                        data.frame(
+                          n = n,
+                          mc_bias = mc_bias,
+                          ex_bias = ex_bias,
+                          diff_bias = diff_bias,
+                          se_bias = se_bias
+                        ))
+}
+```
+```{r}
+# Graph
+plot(bias_results$n,
+     bias_results$diff_bias,
+     pch = 19,
+     type = "b",
+     xlab = "n",
+     ylab = "MC bias - exact bias",
+     main = "Difference between MC bias and exact bias")
+
+# error bounds
+arrows(bias_results$n,
+       bias_results$diff_bias - z_alpha*bias_results$se_bias,
+       bias_results$n,
+       bias_results$diff_bias + z_alpha*bias_results$se_bias,
+       angle = 90, code = 3, length = 0.05)
+
+```
+
+The graph illustrates the difference between the Monte Carlo estimate of the bias and its theoretical value across different sample sizes, together with the corresponding 95% confidence intervals (±1.96 × SE).
+
+For every sample size considered, the observed differences remain very close to zero and lie entirely within the simulation error bounds. These findings indicate that the Monte Carlo procedure accurately approximates the theoretical bias of the maximum estimator, with the approximation improving as the sample size increases.
+
+# Variance Approximation Error
+
+The comparison between simulated and theoretical variances shows a similar pattern. Across all sample sizes, the observed discrepancies remain negligible and fall within the corresponding simulation error bounds, confirming the consistency of the Monte Carlo estimates.
+
+```{r}
+var_results <- data.frame()
+
+for (n in n_values) {
+  
+  t_hat <- replicate(B, {
+    y <- runif(n, 0, theta)
+    max(y)
+  })
+  
+  # Monte Carlo variance
+  mc_var <- var(t_hat)
+  
+  # Exact variance
+  ex_var <- var_exact(theta, n)
+  
+  diff_var <- mc_var - ex_var
+  
+  # standard error for variance 
+  dev2   <- (t_hat - mean(t_hat))^2
+  se_var <- sd(dev2) / sqrt(B)
+  
+  var_results <- rbind(var_results,
+                       data.frame(
+                         n = n,
+                         diff_var = diff_var,
+                         se_var = se_var
+                       ))
+}
+```
+
+```{r}
+# Graph
+plot(var_results$n,
+     var_results$diff_var,
+     type = "b",
+     pch = 19,
+     xlab = "n",
+     ylab = "MC var - exact var",
+     main = "Difference between MC variance and exact variance")
+
+arrows(var_results$n,
+       var_results$diff_var - z_alpha * var_results$se_var,
+       var_results$n,
+       var_results$diff_var + z_alpha * var_results$se_var,
+       angle = 90, code = 3, length = 0.05)
+
+```
+
+The graph presents the difference between the Monte Carlo estimate of the variance and its theoretical value as a function of the sample size n, together with the corresponding 95% confidence intervals (±1.96 × SE).
+
+As n increases, the theoretical variance of the maximum estimator decreases, and the Monte Carlo estimates remain very close to the theoretical variance. The observed differences fall within the simulation error bounds for all sample sizes, indicating that the Monte Carlo procedure accurately reproduces the theoretical variance of the estimator as n increases.
+
+# Mean Squared Error Approximation
+
+The Monte Carlo estimates of the mean squared error closely agree with the analytical values. The small differences observed across different sample sizes are consistent with the expected simulation error, demonstrating the reliability of the simulation framework.
+
+```{r}
+mse_results <- data.frame()
+
+for (n in n_values) {
+  
+  t_hat <- replicate(B, {
+    y <- runif(n, 0, theta)
+    max(y)
+  })
+  
+  # Monte Carlo MSE
+  mc_mse <- mean((t_hat - theta)^2)
+  
+  # Exact MSE
+  ex_mse <- mse_exact(theta, n)
+  
+  # Difference
+  diff_mse <- mc_mse - ex_mse
+  
+  # SE for MSE standard error
+  sq_err  <- (t_hat - theta)^2
+  se_mse  <- sd(sq_err) / sqrt(B)
+  
+  mse_results <- rbind(mse_results,
+                       data.frame(
+                         n = n,
+                         diff_mse = diff_mse,
+                         se_mse = se_mse
+                       ))
+}
+```
+
+```{r}
+#Graph
+plot(mse_results$n,
+     mse_results$diff_mse,
+     type = "b",
+     pch = 19,
+     xlab = "n",
+     ylab = "MC MSE - exact MSE",
+     main = "Difference between MC MSE and exact MSE")
+
+arrows(mse_results$n,
+       mse_results$diff_mse - z_alpha * mse_results$se_mse,
+       mse_results$n,
+       mse_results$diff_mse + z_alpha * mse_results$se_mse,
+       angle = 90, code = 3, length = 0.05)
+
+```
+
+The graph presents the difference between the Monte Carlo estimate of the mean squared error (MSE) and its theoretical value across different sample sizes, together with the corresponding 95% confidence intervals (±1.96 × SE).
+
+The observed differences remain small and lie within the simulation error bounds for every sample size. This agreement provides further evidence that the Monte Carlo simulation accurately reproduces the theoretical mean squared error of the estimator, with the approximation remaining stable across different sample sizes.
+
+# DISCUSSION
+
+## Simulation Design
+
+The baseline simulation was conducted with $\theta$ = 1, providing a convenient reference case for comparing analytical and simulated quantities. A total of 10,000 Monte Carlo replications was used to ensure stable estimates while maintaining computational efficiency. To investigate the effect of sample size, simulations were repeated for a range of values from 5 to 250 observations.
+
+
+## Effect of Sample Size
+
+The simulation results demonstrate that increasing the sample size improves the agreement between the Monte Carlo estimates and the theoretical quantities. As the sample size grows, the differences in bias, variance, and mean squared error become progressively smaller. This behavior is consistent with the Law of Large Numbers, under which simulation-based estimates converge toward their theoretical values.
+
+
+## Sensitivity to the Parameter $\theta$
+
+To evaluate whether the simulation accuracy depends on the scale parameter, the analysis was repeated for several values of $\theta$ while keeping the sample size fixed. The results indicate that the Monte Carlo procedure remains accurate across different parameter values. Although the numerical values of the bias, variance, and MSE naturally change with $\theta$, the differences between theoretical and simulated quantities remain small, indicating that the simulation framework is robust with respect to the choice of $\theta$.
+
+```{r}
+theta_values <- c(0.25, 0.5, 1, 2, 5)
+n <- 10
+
+theta_results <- data.frame()
+
+for (theta in theta_values) {
+  t_hat <- replicate(B, {
+    y <- runif(n, 0, theta)
+    max(y)
+  })
+  
+  mc_bias <- mean(t_hat - theta)
+  ex_bias <- bias_exact(theta, n)
+  
+  mc_var  <- var(t_hat)
+  ex_var  <- var_exact(theta, n)
+  
+  mc_mse  <- mean((t_hat - theta)^2)
+  ex_mse  <- mse_exact(theta, n)
+  
+  theta_results <- rbind(theta_results,
+                         data.frame(
+                           theta = theta,
+                           mc_bias = mc_bias,
+                           ex_bias = ex_bias,
+                           mc_var = mc_var,
+                           ex_var = ex_var,
+                           mc_mse = mc_mse,
+                           ex_mse = ex_mse
+                         ))
+}
+
+theta_results
+
+```
+
+
+## Interpretation of Error Bounds
+
+The simulation error decreases as the sample size increases because larger samples yield estimators with lower variability. Consequently, the corresponding confidence intervals become narrower for larger values of n. Across all experiments, the theoretical quantities consistently fall within the Monte Carlo error bounds, providing strong empirical evidence that the simulation accurately reproduces the theoretical properties of the maximum estimator.
+
+# Conclusion
+
+The Monte Carlo simulations closely reproduced the theoretical bias, variance, and mean squared error of the maximum estimator for samples drawn from a Uniform distribution. As the sample size increased, the agreement between simulated and analytical results improved, while the simulation remained robust across different values of $\theta$. Overall, the study demonstrates that Monte Carlo simulation provides an effective tool for validating theoretical properties of statistical estimators.
+
+
