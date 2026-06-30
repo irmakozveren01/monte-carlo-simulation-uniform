@@ -48,3 +48,4 @@ These findings are consistent with the theoretical behavior of the maximum estim
 ## Authors
 
 **Irmak Özveren**  
+**Halit Kaan Kesgin**
